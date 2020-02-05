@@ -36,21 +36,16 @@ namespace octomap {
 			float free, occu, igno, conf;  // power set of states 
 		};
 
-		EvidOcTreeNode() : OcTreeNode(), igno_before(true) {}
-		EvidOcTreeNode(const EvidOcTreeNode& rhs) : 
-			OcTreeNode(rhs), mass(rhs.mass), occ_before(rhs.occ_before), igno_before(rhs.igno_before) {}	
+		EvidOcTreeNode() : OcTreeNode() {}
+		EvidOcTreeNode(const EvidOcTreeNode& rhs) : OcTreeNode(rhs), mass(rhs.mass) {}	
 		
 		inline EvidMass getMass() const {return mass;}
 		inline void setMass(float _c, float _f, float _o, float _i) {mass = EvidMass(_c, _f, _o, _i);}
 		inline void setMass(const EvidMass& _mass) {mass = _mass;}
 
-		inline bool isMassSet() const {return igno_before;}
-
 		void copyData(const EvidOcTreeNode& from){
 			OcTreeNode::copyData(from);
 			this->mass = from.getMass();
-			occ_before = from.occ_before;
-			igno_before = from.igno_before;
 		}
 
 		/// update this node's evidential mass according to its children's evidential mass
@@ -60,8 +55,6 @@ namespace octomap {
 
 	protected:
 		EvidMass mass;
-		bool occ_before;  // whether occupied in previous pointcloud. Only have meaning if igno_before = false
-		bool igno_before; // whether is uknown in prev pointlcoud
 	};
 
 	// tree definition ---------------------------------------------
@@ -89,13 +82,13 @@ namespace octomap {
 		 * given LiDAR measurement. 
 		 */ 
 		struct BasicBeliefAssignment{
-			BasicBeliefAssignment(float _c, float _f, float _o, float _i, bool _isOcc) 
-					: mc(_c), mf(_f), mo(_o), mi(_i), isOcc(_isOcc) {}
-			BasicBeliefAssignment(const BasicBeliefAssignment& rhs) : mc(rhs.mc), mf(rhs.mf), mo(rhs.mo), mi(rhs.mi), isOcc(rhs.isOcc) {}
-
+			BasicBeliefAssignment() : mc(0.0), mf(0.0), mo(0.0), mi(0.0) {}
+			
 			float mc, mf, mo, mi;  // evidential mass
 			bool isOcc;
 		};
+
+		EvidOcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false);
 
 		EvidOcTreeNode* updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, bool lazy_eval = false);
 		
@@ -111,6 +104,9 @@ namespace octomap {
 		void upadteNodeEvidMass(EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2) const;
 
 	protected:
+		// initial evidential mass corresponding to whether a cell is occupied or free
+		const float bba_mo = 0.7, bba_mf = 0.85;
+
 		/**
      * Static member object which ensures that this OcTree's prototype
      * ends up in the classIDMapping only once. You need this as a 
