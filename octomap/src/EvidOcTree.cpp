@@ -91,14 +91,13 @@ namespace octomap {
 
 	EvidOcTreeNode* EvidOcTree::updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval) {
 		BasicBeliefAssignment bba_m2;
-		bba_m2.isOcc = occupied;
 		if(occupied) {
 			bba_m2.mo = bba_mo;
-			bba_m2.mi = 1.0 - bba_mo;
+			bba_m2.mi = 1.0f - bba_mo;
 		} else {
 			// free
 			bba_m2.mf = bba_mf;
-			bba_m2.mi = 1.0 - bba_mf;
+			bba_m2.mi = 1.0f - bba_mf;
 		}
 		return updateNode(key, bba_m2, lazy_eval);
 	}
@@ -155,32 +154,36 @@ namespace octomap {
     }
     // at last level, update node, end of recursion
     else {
-      upadteNodeEvidMass(node, bba_m2);
+      upadteNodeEvidMass(key, node, bba_m2);
       return node;
     }
 	}
 
-	void EvidOcTree::upadteNodeEvidMass(EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2) const {
+	void EvidOcTree::upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment &bba_m2) {
 		// conjuctive fusion
 		float m12_c = evidNode->mass.free_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mf;
 		float m12_f = evidNode->mass.free_() * bba_m2.mf + evidNode->mass.free_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mf;
 		float m12_o = evidNode->mass.occu_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mo;
 		float m12_i = evidNode->mass.igno_() * bba_m2.mi;
+		
+		// detect cell with high conflict mass
+		if(m12_c > this->thres_conf)
+			this->conf_keys.push_back(key);
 
 		// dempster normalization
-		float k = 1.0 / (1.0 - m12_c);
-		evidNode->setMass(m12_c, k*m12_f, k*m12_o, k*m12_i);
+		float k = 1.0f / (1.0f - m12_c);
+		evidNode->setMass(0.0f, k*m12_f, k*m12_o, k*m12_i);
 
 		// update node's logodds value
-		float occuProb = k*(m12_o + m12_i*0.5);
+		float occuProb = k*(m12_o + m12_i*0.5f);
 		evidNode->setLogOdds(logodds((double) occuProb));
 		if (evidNode->getLogOdds() < this->clamping_thres_min) {
-      evidNode->setLogOdds(this->clamping_thres_min);
-      return;
-    }
-    if (evidNode->getLogOdds() > this->clamping_thres_max) {
-      evidNode->setLogOdds(this->clamping_thres_max);
-    }
+			evidNode->setLogOdds(this->clamping_thres_min);
+			return;
+		}
+		if (evidNode->getLogOdds() > this->clamping_thres_max) {
+			evidNode->setLogOdds(this->clamping_thres_max);
+		}
 	}
 
 	//TODO: A function to search for node with high conflict

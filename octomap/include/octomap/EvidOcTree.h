@@ -4,6 +4,7 @@
 #include <octomap/OcTreeNode.h>
 #include <octomap/OccupancyOcTreeBase.h>
 #include <iostream>
+#include <vector>
 
 namespace octomap {
 
@@ -33,7 +34,7 @@ namespace octomap {
 			float igno_() const {return igno;}
 		
 		protected:
-			float free, occu, igno, conf;  // power set of states 
+			float conf, free, occu, igno;  // power set of states 
 		};
 
 		EvidOcTreeNode() : OcTreeNode() {}
@@ -85,7 +86,6 @@ namespace octomap {
 			BasicBeliefAssignment() : mc(0.0), mf(0.0), mo(0.0), mi(0.0) {}
 			
 			float mc, mf, mo, mi;  // evidential mass
-			bool isOcc;
 		};
 
 		EvidOcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false);
@@ -101,11 +101,17 @@ namespace octomap {
 		 * Node's log odds is preserved for pruning & occupancy queries but no longer directly
 		 * updated. Instead, node's occupancy probability is retrieved by the Pignistic Transformation
 		 */
-		void upadteNodeEvidMass(EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2) const;
+		void upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2);
 
 	protected:
 		// initial evidential mass corresponding to whether a cell is occupied or free
-		const float bba_mo = 0.7, bba_mf = 0.85;
+		const float bba_mo = 0.7f, bba_mf = 0.85f;
+
+		// threshold of conflict mass for detecting moving objects
+		const float thres_conf = 0.35f;  //TODO: tune this
+
+    std::vector<OcTreeKey> conf_keys;
+
 
 		/**
      * Static member object which ensures that this OcTree's prototype
