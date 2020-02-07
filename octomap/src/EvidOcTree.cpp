@@ -1,11 +1,6 @@
 #include <octomap/EvidOcTree.h>
 #include <octomap/octomap_utils.h>
 
-template<typename T>
-bool isNull(T x){return fabs(x) < 1e-5;}
-
-template<typename T>
-bool isEqual(T x, T y){return isNull(x-y);}
 
 namespace octomap {
 
@@ -49,7 +44,7 @@ namespace octomap {
 
 	float EvidOcTreeNode::evidMassToLogOdds() const {
 		// use Pignistic Transformation to convert evidential mass to occupancy probability
-		return logodds((double) mass.occu_() + mass.igno_() * 0.5f);
+		return logodds((double) (mass.occu_() + mass.igno_() * 0.5f));
 	}
 
 	// tree implementation ------------------------------------------------------
@@ -186,6 +181,9 @@ namespace octomap {
 	}
 
 	void EvidOcTree::upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment &bba_m2) {
+		// decay mass of current node
+		evidNode->decayMass(this->massDecayFactor);
+
 		// conjuctive fusion
 		float m12_c = evidNode->mass.free_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mf;
 		float m12_f = evidNode->mass.free_() * bba_m2.mf + evidNode->mass.free_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mf;
