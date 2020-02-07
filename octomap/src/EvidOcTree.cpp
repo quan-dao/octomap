@@ -234,4 +234,6 @@ namespace octomap {
 		}
 	}
 
+	EvidOcTree::StaticMemberInitializer EvidOcTree::evidOcTreeMemberInit;
+
 }//end namespace

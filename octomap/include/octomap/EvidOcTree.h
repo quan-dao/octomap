@@ -28,6 +28,10 @@ namespace octomap {
 				occu = rhs.occu; 
 				igno = rhs.igno;}
 
+			bool operator== (const EvidMass& rhs){
+				return (conf==rhs.conf) && (free == rhs.free) && (occu == rhs.occu) && (igno == rhs.igno);
+			}
+
 			float conf_() const {return conf;}
 			float free_() const {return free;}
 			float occu_() const {return occu;}
@@ -56,7 +60,7 @@ namespace octomap {
 			this->mass = from.getMass();
 		}
 
-    inline void printMass() {
+    inline void printMass() const {
       std::cout << mass.conf_() << "\t" << mass.free_() << "\t" << mass.occu_() << "\t" << mass.igno_() << "\n";
     }
 
@@ -133,7 +137,7 @@ namespace octomap {
 		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth);
 
 		// initial evidential mass corresponding to whether a cell is occupied or free
-		const float bba_mo = 0.8f, bba_mf = 0.8f;
+		const float bba_mo = 0.55f, bba_mf = 0.55f; // 0.8
 		
 		// decay factor
 		const float massDecayFactor = 0.05f;
@@ -170,6 +174,10 @@ namespace octomap {
     static StaticMemberInitializer evidOcTreeMemberInit;
 
 	};
+
+	std::ostream& operator<<(std::ostream& out, const EvidOcTreeNode::EvidMass& mass) {
+    return out << '(' << mass.conf_() << ' ' << mass.free_() << ' ' << mass.occu_() << ' ' << mass.igno_() << ')';
+  }
 
 } // end namespace
 
