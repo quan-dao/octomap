@@ -18,7 +18,7 @@ namespace octomap {
 		
 		class EvidMass {
 		public:	
-			EvidMass() : conf(0.), free(0.), occu(0.), igno(1.0) {};
+			EvidMass() : conf(0.), free(0.), occu(0.), igno(0.99) {};
 			EvidMass(float _c, float _f, float _o, float _i) 
 				: conf(_c), free(_f), occu(_o), igno(_i) {};
 
@@ -43,6 +43,13 @@ namespace octomap {
 		inline EvidMass getMass() const {return mass;}
 		inline void setMass(float _c, float _f, float _o, float _i) {mass = EvidMass(_c, _f, _o, _i);}
 		inline void setMass(const EvidMass& _mass) {mass = _mass;}
+		inline void decayMass(const float alp){
+			EvidMass _mass = EvidMass(alp*mass.conf_(),
+															alp*mass.free_(),
+															alp*mass.occu_(),
+															alp*mass.igno_() + 1.0f-alp);
+			setMass(_mass);
+		}
 
 		void copyData(const EvidOcTreeNode& from){
 			OcTreeNode::copyData(from);
@@ -126,7 +133,10 @@ namespace octomap {
 		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth);
 
 		// initial evidential mass corresponding to whether a cell is occupied or free
-		const float bba_mo = 0.7f, bba_mf = 0.85f;
+		const float bba_mo = 0.8f, bba_mf = 0.8f;
+		
+		// decay factor
+		const float massDecayFactor = 0.05f;
 
 		// threshold of conflict mass for detecting moving objects
 		const float thres_conf = 0.35f;  //TODO: tune this
