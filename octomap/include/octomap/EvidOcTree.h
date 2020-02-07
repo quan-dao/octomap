@@ -32,7 +32,7 @@ namespace octomap {
 			float free_() const {return free;}
 			float occu_() const {return occu;}
 			float igno_() const {return igno;}
-		
+
 		protected:
 			float conf, free, occu, igno;  // power set of states 
 		};
@@ -49,8 +49,18 @@ namespace octomap {
 			this->mass = from.getMass();
 		}
 
+    inline void printMass() {
+      std::cout << mass.conf_() << "\t" << mass.free_() << "\t" << mass.occu_() << "\t" << mass.igno_() << "\n";
+    }
+
 		/// update this node's evidential mass according to its children's evidential mass
 		void updateMassChildren();
+
+		/// update this node's occupancy probability according to its evidential mass computed from its children's evidential mass
+		void updateOccupancyChildren();
+
+		/// convert evidential mass to occupancy probability
+		float evidMassToLogOdds() const;
 
 		EvidOcTreeNode::EvidMass getAverageChildMass() const;
 
@@ -88,6 +98,8 @@ namespace octomap {
 			float mc, mf, mo, mi;  // evidential mass
 		};
 
+    EvidOcTreeNode* updateNode(const point3d& value, bool occupied, bool lazy_eval = false);
+
 		EvidOcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false);
 
 		EvidOcTreeNode* updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, bool lazy_eval = false);
@@ -103,7 +115,16 @@ namespace octomap {
 		 */
 		void upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2);
 
+		/**
+		 * Function for updating occupancy of inner nodes after integrating measurement with lazy_eval on
+		 * This function needs to be called after updating node with lazy_evale enabled to
+		 * ensure multi resolution behavior.
+		 */
+		void updateInnerOccupancy();
+
 	protected:
+		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth);
+
 		// initial evidential mass corresponding to whether a cell is occupied or free
 		const float bba_mo = 0.7f, bba_mf = 0.85f;
 
