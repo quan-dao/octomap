@@ -83,7 +83,15 @@ int main(int argc, char** argv) {
   OcTreeNode* result = tree.search (query);
   print_query_info(query, result);
 
+  query = point3d(-0.5,-0.5,-0.5);
+  result = tree.search (query);
+  print_query_info(query, result);
+
   query = point3d(-1.,-1.,-1.);
+  result = tree.search (query);
+  print_query_info(query, result);
+
+  query = point3d(0.5,0.5,0.5);
   result = tree.search (query);
   print_query_info(query, result);
 
