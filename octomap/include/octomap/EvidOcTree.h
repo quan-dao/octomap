@@ -41,8 +41,8 @@ namespace octomap {
 			float conf, free, occu, igno;  // power set of states 
 		};
 
-		EvidOcTreeNode() : OcTreeNode() {}
-		EvidOcTreeNode(const EvidOcTreeNode& rhs) : OcTreeNode(rhs), mass(rhs.mass) {}	
+		EvidOcTreeNode() : OcTreeNode(), timestamp(0) {}
+		EvidOcTreeNode(const EvidOcTreeNode& rhs) : OcTreeNode(rhs), mass(rhs.mass), timestamp(rhs.timestamp) {}	
 		
 		inline EvidMass getMass() const {return mass;}
 		inline void setMass(float _c, float _f, float _o, float _i) {mass = EvidMass(_c, _f, _o, _i);}
@@ -57,26 +57,33 @@ namespace octomap {
 
 		void copyData(const EvidOcTreeNode& from){
 			OcTreeNode::copyData(from);
-			this->mass = from.getMass();
+			mass = from.getMass();
+			setTimestamp(from.getTimestamp());
 		}
-
-    inline void printMass() const {
-      std::cout << mass.conf_() << "\t" << mass.free_() << "\t" << mass.occu_() << "\t" << mass.igno_() << "\n";
-    }
 
 		/// update this node's evidential mass according to its children's evidential mass
 		void updateMassChildren();
 
 		/// update this node's occupancy probability according to its evidential mass computed from its children's evidential mass
-		void updateOccupancyChildren();
+		void updateOccupancyChildrenStamped(uint32_t timestamp);
 
 		/// convert evidential mass to occupancy probability
 		float evidMassToLogOdds() const;
 
+		/// Average mass of a node's children
 		EvidOcTreeNode::EvidMass getAverageChildMass() const;
+
+		/**
+		 * Helper function for handling timestamp.
+		 * Only provide function for setting timestamp equal to an input so that
+		 * timestamp can be set according to ROS timestamp
+		 */
+		inline uint32_t getTimestamp() const { return timestamp; }
+    inline void setTimestamp(uint32_t t) {timestamp = t; }
 
 	protected:
 		EvidMass mass;
+		uint32_t timestamp;
 	};
 
 	// tree definition ---------------------------------------------
@@ -109,14 +116,14 @@ namespace octomap {
 			float mc, mf, mo, mi;  // evidential mass
 		};
 
-    EvidOcTreeNode* updateNode(const point3d& value, bool occupied, bool lazy_eval = false);
+    EvidOcTreeNode* updateNode(const point3d& value, bool occupied, uint32_t timestamp, bool lazy_eval = false);
 
-		EvidOcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false);
+		EvidOcTreeNode* updateNode(const OcTreeKey& key, bool occupied, uint32_t timestamp, bool lazy_eval = false);
 
-		EvidOcTreeNode* updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, bool lazy_eval = false);
+		EvidOcTreeNode* updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, uint32_t timestamp, bool lazy_eval = false);
 		
 		EvidOcTreeNode* updateNodeRecurs(EvidOcTreeNode* node, bool node_just_created, const OcTreeKey& key,
-                           unsigned int depth, const BasicBeliefAssignment& bba_m2, bool lazy_eval = false);
+                           unsigned int depth, const BasicBeliefAssignment& bba_m2, uint32_t timestamp, bool lazy_eval = false);
 		
 		/**
 		 * Counter part of updateNodeLogOdds in Evidential Grid
@@ -124,26 +131,33 @@ namespace octomap {
 		 * Node's log odds is preserved for pruning & occupancy queries but no longer directly
 		 * updated. Instead, node's occupancy probability is retrieved by the Pignistic Transformation
 		 */
-		void upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2);
+		void upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment& bba_m2, uint32_t timestamp);
 
 		/**
 		 * Function for updating occupancy of inner nodes after integrating measurement with lazy_eval on
 		 * This function needs to be called after updating node with lazy_evale enabled to
 		 * ensure multi resolution behavior.
 		 */
-		void updateInnerOccupancy();
+		void updateInnerOccupancy(uint32_t timestamp);
+
+		/**
+		 * Function for publishing coordinates of cells having high conflict mass.
+		 * To get coordinates of these cells, their keys are first converted "point3d"
+		 * After publishing this function wipe out vector "conf_keys" for updating with incoming measurement 
+		 */ 
+		void publishMovingCells();
 
 	protected:
-		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth);
+		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth, uint32_t timestamp);
 
 		// initial evidential mass corresponding to whether a cell is occupied or free
-		const float bba_mo = 0.55f, bba_mf = 0.55f; // 0.8
+		const float bba_mo = 0.7f, bba_mf = 0.7f; // 0.8
 		
-		// decay factor
-		const float massDecayFactor = 0.05f;
+		// time constance
+		const float tau = 1.3f;
 
 		// threshold of conflict mass for detecting moving objects
-		const float thres_conf = 0.35f;  //TODO: tune this
+		const float thres_conf = 0.005f;  //TODO: tune this
 
     std::vector<OcTreeKey> conf_keys;
 

@@ -1,5 +1,6 @@
 #include <octomap/EvidOcTree.h>
 #include <octomap/octomap_utils.h>
+#include <cmath>
 
 
 namespace octomap {
@@ -37,9 +38,10 @@ namespace octomap {
 		setMass(getAverageChildMass());
 	}
 
-	void EvidOcTreeNode::updateOccupancyChildren() {
-		updateMassChildren();
+	void EvidOcTreeNode::updateOccupancyChildrenStamped(uint32_t timestamp) {
+		this->updateMassChildren();
 		this->setLogOdds(this->evidMassToLogOdds());
+		this->setTimestamp(timestamp);
 	}
 
 	float EvidOcTreeNode::evidMassToLogOdds() const {
@@ -91,15 +93,15 @@ namespace octomap {
     return true;
   }
 
-	EvidOcTreeNode* EvidOcTree::updateNode(const point3d& value, bool occupied, bool lazy_eval) {
+	EvidOcTreeNode* EvidOcTree::updateNode(const point3d& value, bool occupied, uint32_t timestamp, bool lazy_eval) {
 		OcTreeKey key;
     if (!this->coordToKeyChecked(value, key))
       return NULL;
 		// std::cout << "Key found. Proceed to updateNode(key, occupied, lazy_eval)\n";
-    return updateNode(key, occupied, lazy_eval);
+    return updateNode(key, occupied, timestamp, lazy_eval);
 	}
 
-	EvidOcTreeNode* EvidOcTree::updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval) {
+	EvidOcTreeNode* EvidOcTree::updateNode(const OcTreeKey& key, bool occupied, uint32_t timestamp, bool lazy_eval) {
 		BasicBeliefAssignment bba_m2;
 		if(occupied) {
 			bba_m2.mo = bba_mo;
@@ -110,10 +112,10 @@ namespace octomap {
 			bba_m2.mi = 1.0f - bba_mf;
 		}
 		// std::cout << "bba_m2 is created. Proceed to updateNode(key, bba_m2, lazy_eval)\n";
-		return updateNode(key, bba_m2, lazy_eval);
+		return updateNode(key, bba_m2, timestamp, lazy_eval);
 	}
 
-	EvidOcTreeNode* EvidOcTree::updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, bool lazy_eval) {
+	EvidOcTreeNode* EvidOcTree::updateNode(const OcTreeKey& key, BasicBeliefAssignment bba_m2, uint32_t timestamp, bool lazy_eval) {
 		bool createdRoot = false;
     if (this->root == NULL){
       this->root = new EvidOcTreeNode();
@@ -121,14 +123,13 @@ namespace octomap {
       createdRoot = true;
     }
 		// std::cout << "root is created. Proceed to recursive\n";
-    return updateNodeRecurs(this->root, createdRoot, key, 0, bba_m2, lazy_eval);
+    return updateNodeRecurs(this->root, createdRoot, key, 0, bba_m2, timestamp, lazy_eval);
 	}
 
 	EvidOcTreeNode* EvidOcTree::updateNodeRecurs(EvidOcTreeNode* node, bool node_just_created, const OcTreeKey& key,
-                           unsigned int depth, const BasicBeliefAssignment& bba_m2, bool lazy_eval) {
+                           unsigned int depth, const BasicBeliefAssignment& bba_m2, uint32_t timestamp, bool lazy_eval) {
 		bool created_node = false;
-		// std::cout << "\n------------ Calling updateNodeRecurs\t" << "depth = "<< depth << "(tree depth = "<< this->tree_depth <<"\n";
-    assert(node);
+		assert(node);
 
     // follow down to last level
     if (depth < this->tree_depth) {
@@ -138,23 +139,18 @@ namespace octomap {
         if (!this->nodeHasChildren(node) && !node_just_created ) {
           // current node does not have children AND it is not a new node
           // -> expand pruned node
-          // std::cout << "Preparing expandNode()\n";
 					this->expandNode(node);
-					// std::cout << "Finishing expandNode()\n";
-        }
-        else {
+				} else {
           // not a pruned node, create requested child
-					// std::cout << "Preparing createNodeChild()\n";
-          this->createNodeChild(node, pos);
-					// std::cout << "Finishing createNodeChild() -------\n";
-          created_node = true;
+					this->createNodeChild(node, pos);
+					created_node = true;
         }
       }
 
       if (lazy_eval)
-        return updateNodeRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, bba_m2, lazy_eval);
+        return updateNodeRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, bba_m2, timestamp, lazy_eval);
       else {
-        EvidOcTreeNode* retval = updateNodeRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, bba_m2, lazy_eval);
+        EvidOcTreeNode* retval = updateNodeRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, bba_m2, timestamp, lazy_eval);
 				// prune node if possible, otherwise set own probability
         // note: combining both did not lead to a speedup!
         // if (this->pruneNode(node)){
@@ -172,17 +168,20 @@ namespace octomap {
     }
     // at last level, update node, end of recursion
     else {
-			// std::cout << "Reach leaf node\n";
-      upadteNodeEvidMass(key, node, bba_m2);
-			// std::cout << "Finish updating leaf node\n";
+			upadteNodeEvidMass(key, node, bba_m2, timestamp);
 			EvidOcTreeNode* leaf = node;
       return leaf;  // ptr to leaf
     }
 	}
 
-	void EvidOcTree::upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment &bba_m2) {
+	void EvidOcTree::upadteNodeEvidMass(const OcTreeKey& key, EvidOcTreeNode* evidNode, const BasicBeliefAssignment &bba_m2, uint32_t timestamp) {
+		// compute decay factor
+		uint32_t delta_t = timestamp - evidNode->getTimestamp();  // in millisecond 
+		assert(delta_t >= 0);
+		float alpha = exp(((float) delta_t /1000.0f) / tau);
+		
 		// decay mass of current node
-		evidNode->decayMass(this->massDecayFactor);
+		evidNode->decayMass(alpha);
 
 		// conjuctive fusion
 		float m12_c = evidNode->mass.free_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mf;
@@ -190,9 +189,11 @@ namespace octomap {
 		float m12_o = evidNode->mass.occu_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mo;
 		float m12_i = evidNode->mass.igno_() * bba_m2.mi;
 		
-		// // detect cell with high conflict mass
+		// detect cell with high conflict mass
 		if(m12_c > this->thres_conf)
 			this->conf_keys.push_back(key);
+		// else
+		// 	std::cout << "conflict mass = " << m12_c << "\n";
 
 		// dempster normalization
 		float k = 1.0f / (1.0f - m12_c);
@@ -209,29 +210,38 @@ namespace octomap {
 		if (evidNode->getLogOdds() > this->clamping_thres_max) {
 			evidNode->setLogOdds(this->clamping_thres_max);
 		}
-		// std::cout << "Finish updating EvidMass\n";
 	}
 
-	void EvidOcTree::updateInnerOccupancy() {
-		this->updateInnerOccupancyRecurs(this->root, 0);
+	void EvidOcTree::updateInnerOccupancy(uint32_t timestamp) {
+		this->updateInnerOccupancyRecurs(this->root, 0, timestamp);
 	}
 
-	void EvidOcTree::updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth){
+	void EvidOcTree::updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth, uint32_t timestamp){
 		// only update inner node
 		if(this->nodeHasChildren(node)) {
 			// return early to last level
 			if(depth < this->tree_depth) {
 				for(unsigned int i=0; i<8; i++) {
 					if(this->nodeChildExists(node, i))
-						updateInnerOccupancyRecurs(getNodeChild(node, i), depth+1);
+						updateInnerOccupancyRecurs(getNodeChild(node, i), depth+1, timestamp);
 				}
 			}
 			// end of recursion, reach leaf node
-			node->updateOccupancyChildren();
+			node->updateOccupancyChildrenStamped(timestamp);
 			// try to prune node 
 			this->pruneNode(node);
-			// std::cout << "pruneNode " << this->pruneNode(node) << "\n";
 		}
+	}
+	
+	void EvidOcTree::publishMovingCells() {
+		// iterate conf_keys, convert key to coordinate & print out coordinate
+		std::cout << "Moving cells cooridnates:\n";
+		for(unsigned  i = 0; i < conf_keys.size(); i++) {
+			point3d p_ = keyToCoord(conf_keys[i]);
+			std::cout << "( " << p_.x() << ", " << p_.y() << ", " << p_.z() << " )\n"; 
+		}
+		// clear conf_keys to prepare for next measurement
+		conf_keys.clear();
 	}
 
 	EvidOcTree::StaticMemberInitializer EvidOcTree::evidOcTreeMemberInit;
