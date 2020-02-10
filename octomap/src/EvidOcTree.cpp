@@ -93,6 +93,26 @@ namespace octomap {
     return true;
   }
 
+	void EvidOcTree::insertPointCloud(const Pointcloud& scan, const octomap::point3d& sensor_origin, uint32_t timestamp,
+                   double maxrange, bool lazy_eval, bool discretize) {
+		KeySet free_cells, occupied_cells;
+    if (discretize)
+      computeDiscreteUpdate(scan, sensor_origin, free_cells, occupied_cells, maxrange);
+    else
+      computeUpdate(scan, sensor_origin, free_cells, occupied_cells, maxrange);
+
+    // insert data into tree  -----------------------
+    for (KeySet::iterator it = free_cells.begin(); it != free_cells.end(); ++it) {
+      updateNode(*it, false, timestamp, lazy_eval);
+    }
+    for (KeySet::iterator it = occupied_cells.begin(); it != occupied_cells.end(); ++it) {
+      updateNode(*it, true, timestamp, lazy_eval);
+    }
+
+		/// with this evidential grid implementation lazy_eval is always on, need to call updateInnerOccupancy() 
+		updateInnerOccupancy(timestamp);
+	}
+
 	EvidOcTreeNode* EvidOcTree::updateNode(const point3d& value, bool occupied, uint32_t timestamp, bool lazy_eval) {
 		OcTreeKey key;
     if (!this->coordToKeyChecked(value, key))
@@ -178,8 +198,10 @@ namespace octomap {
 		// compute decay factor
 		uint32_t delta_t = timestamp - evidNode->getTimestamp();  // in millisecond 
 		assert(delta_t >= 0);
-		float alpha = exp(((float) delta_t /1000.0f) / tau);
 		
+		float alpha = exp(-((float) delta_t /1000.0f) / tau);
+		assert((alpha >= 0.0f) && (alpha <=1.0f));
+
 		// decay mass of current node
 		evidNode->decayMass(alpha);
 
@@ -188,7 +210,8 @@ namespace octomap {
 		float m12_f = evidNode->mass.free_() * bba_m2.mf + evidNode->mass.free_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mf;
 		float m12_o = evidNode->mass.occu_() * bba_m2.mo + evidNode->mass.occu_() * bba_m2.mi + evidNode->mass.igno_() * bba_m2.mo;
 		float m12_i = evidNode->mass.igno_() * bba_m2.mi;
-		
+		assert(evidNode->mass.isMassValid());
+
 		// detect cell with high conflict mass
 		if(m12_c > this->thres_conf)
 			this->conf_keys.push_back(key);
@@ -233,9 +256,9 @@ namespace octomap {
 		}
 	}
 	
-	void EvidOcTree::publishMovingCells() {
+	void EvidOcTree::publishMovingCells(uint32_t timestamp) {
 		// iterate conf_keys, convert key to coordinate & print out coordinate
-		std::cout << "Moving cells cooridnates:\n";
+		std::cout << "[TIME = " << timestamp <<"] Moving cells cooridnates:\n";
 		for(unsigned  i = 0; i < conf_keys.size(); i++) {
 			point3d p_ = keyToCoord(conf_keys[i]);
 			std::cout << "( " << p_.x() << ", " << p_.y() << ", " << p_.z() << " )\n"; 

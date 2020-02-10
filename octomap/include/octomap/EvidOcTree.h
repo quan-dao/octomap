@@ -37,6 +37,11 @@ namespace octomap {
 			float occu_() const {return occu;}
 			float igno_() const {return igno;}
 
+			bool isMassValid() const {
+				float mass_sum = conf + free + occu + igno;
+				return (conf>=0.0f) && (free>=0.0f) && (occu>=0.0f) && (igno>=0.0f) && (mass_sum >= 0.98f) && (mass_sum <= 1.0f);  
+			}
+
 		protected:
 			float conf, free, occu, igno;  // power set of states 
 		};
@@ -141,11 +146,17 @@ namespace octomap {
 		void updateInnerOccupancy(uint32_t timestamp);
 
 		/**
+		 * Function for insert point cloud expressed in GLOBAL frame with timestamp
+		 */
+		void insertPointCloud(const Pointcloud& scan, const octomap::point3d& sensor_origin, uint32_t timestamp,
+                   double maxrange=-1., bool lazy_eval = false, bool discretize = false);
+
+		/**
 		 * Function for publishing coordinates of cells having high conflict mass.
 		 * To get coordinates of these cells, their keys are first converted "point3d"
 		 * After publishing this function wipe out vector "conf_keys" for updating with incoming measurement 
 		 */ 
-		void publishMovingCells();
+		void publishMovingCells(uint32_t timestamp);
 
 	protected:
 		void updateInnerOccupancyRecurs(EvidOcTreeNode* node, unsigned int depth, uint32_t timestamp);
