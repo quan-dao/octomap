@@ -213,8 +213,10 @@ namespace octomap {
 		assert(evidNode->mass.isMassValid());
 
 		// detect cell with high conflict mass
-		if(m12_c > this->thres_conf)
+		if(m12_c > this->thres_conf) {
 			this->conf_keys.push_back(key);
+			// std::cout << "-------- Detected moving cells with conflict mass = " << m12_c << "\n";
+		}
 		// else
 		// 	std::cout << "conflict mass = " << m12_c << "\n";
 

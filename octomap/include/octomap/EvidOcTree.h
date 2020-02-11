@@ -18,7 +18,7 @@ namespace octomap {
 		
 		class EvidMass {
 		public:	
-			EvidMass() : conf(0.), free(0.), occu(0.), igno(0.99) {};
+			EvidMass() : conf(0.f), free(0.f), occu(0.f), igno(1.0f) {};
 			EvidMass(float _c, float _f, float _o, float _i) 
 				: conf(_c), free(_f), occu(_o), igno(_i) {};
 
@@ -39,7 +39,13 @@ namespace octomap {
 
 			bool isMassValid() const {
 				float mass_sum = conf + free + occu + igno;
-				return (conf>=0.0f) && (free>=0.0f) && (occu>=0.0f) && (igno>=0.0f) && (mass_sum >= 0.98f) && (mass_sum <= 1.0f);  
+				bool re = (conf>=0.0f) && (free>=0.0f) && (occu>=0.0f) && (igno>=0.0f) && (mass_sum >= 0.95f) && (mass_sum <= 1.05f);
+				if (!re) {
+					std::cout << "Invalid mass ========== \n";
+					std::cout << '(' << conf << ' ' << free << ' ' << occu << ' ' << igno << ")\n";
+					std::cout << "mass_sum = " << mass_sum << "\n";
+				}
+				return re;  
 			}
 
 		protected:
@@ -168,7 +174,7 @@ namespace octomap {
 		const float tau = 1.3f;
 
 		// threshold of conflict mass for detecting moving objects
-		const float thres_conf = 0.005f;  //TODO: tune this
+		const float thres_conf = 0.2f;  //TODO: tune this
 
     std::vector<OcTreeKey> conf_keys;
 
